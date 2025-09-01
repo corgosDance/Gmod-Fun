@@ -1,0 +1,638 @@
+#Welcome to my Mini-game made by corgosDance! Thanks for downloading from workshop or where ever you got it from. Maybe i gave it to you who knows. :)
+#Here is how it Works! 1. Spawn an EGP Screen. I use hunter/plates/plate4x4 model. Spawn a toggle Button and both E2 Chips. Make sure to place this Spawner 
+#in an open area. You can build a arena around it if you want. Wire "Run" from both chips to the Button(this Starts and PAUSES, so it won't reset your progress, to do this simly reupload the code)
+#Now Wire from the HUD Chip: E[Wirelink] to the EGP Screen. Then wire the rest from the HUD Cip to the Spawner so it tracks the Waves,LVL,EXP... 
+#If screen only shows a Bar, simply upload the code again and it should be fixed.
+#HOW-TO-PLAY: Pick the Gravity Gun and a Pistol or only Grav-Gun, discard the rest. Every Zombie you kill will spawn Explosives. 
+#Shoot them with your Grav-gun to kill more Zombies! Special Zombies and Boss fights appear and you get a small break inbetween couple of waves.
+#The faster a wave dies the more XP you'll collect. Try to reach the high LVL's befor the Zombies overwhelm you, or you might accidentally blow yourself up :^)
+#Fun-Rules: Grav-Gun and Pistol or only Grav. 3 Lives(respawns). Suitarmor and Healthrecharge thingys are allowed. But you can play however you like. (You could spawn a cage and make a party of npcs to face the zombie horde) 
+#HAVE FUN!! corgosDance
+@name Zombie Waves Spawner by corgosDance
+@inputs Run
+@outputs Wave Alive Countdown XP TotalKilled
+@persist Z:array ZPos:array LastPrint LastAlive NeutralizedAnnouncedWave Wave XP TotalKilled NextBigPauseWave
+@persist LootItems:array LootChance:array BossLootChance:array RunStatus
+@persist SpecialE:array SpecialPos:array
+@persist TrickleActive TrickleRemaining TrickleNext
+@persist BossE:array
+@persist ZClass:array
+@persist SpawnRadius MinDistNormal MinDistBoss TmpSpawn:array
+@model models/gibs/hgibs.mdl
+
+if(first()){
+    Wave = 0
+    Countdown = 6
+    LastPrint = -1
+    TotalKilled = 0
+    XP = 0
+    LastAlive = 0
+    NeutralizedAnnouncedWave = 0
+    NextBigPauseWave = 3
+    RunStatus = 1
+
+    Z = array()
+    ZPos = array()
+    ZClass = array()
+    I = 1
+    while(I <= 20){
+        Z:pushEntity(noentity())
+        ZPos:pushVector(vec(0,0,0))
+        ZClass:pushString("")
+        I++
+    }
+
+    SpecialE = array()
+    SpecialPos = array()
+
+    TrickleActive = 0
+    TrickleRemaining = 0
+    TrickleNext = 0
+
+    BossE = array()
+
+    # Spawn-Safety-Parameters
+    SpawnRadius = 340
+    MinDistNormal = 64
+    MinDistBoss = 120
+    TmpSpawn = array()
+
+    # Loot-Items
+    LootItems = array()
+    LootItems:pushString("models/props_c17/oildrum001_explosive.mdl")         # rare
+    LootItems:pushString("models/props_ junk/propane_tank001a.mdl")            # uncommon
+    LootItems:pushString("models/props_junk/gascan001a.mdl")                  # uncommon
+    LootItems:pushString("models/props_explosive/explosive_butane_can.mdl")   # common
+
+    # Standard-Weighting
+    LootChance = array()
+    LootChance:pushNumber(15)
+    LootChance:pushNumber(30)
+    LootChance:pushNumber(35)
+    LootChance:pushNumber(20)
+
+    # Boss-Weigting
+    BossLootChance = array()
+    BossLootChance:pushNumber(40)
+    BossLootChance:pushNumber(20)
+    BossLootChance:pushNumber(20)
+    BossLootChance:pushNumber(20)
+}
+
+interval(1000)
+
+RunStatus = Run != 0 ? 1 : 0
+
+if(RunStatus == 1){
+    Alive = 0
+
+    # -------- Normal Slots --------
+    I = 1
+    while(I <= 20){
+        Ent = Z[I,entity]
+        if(Ent:isValid()){
+            Alive++
+            ZPos[I,vector] = Ent:pos()
+        } else {
+            if(Ent != noentity()){
+                TotalKilled++
+                XP += 20 + Wave * 5
+
+                # 70% Drop-Chance
+                DoDrop = (random(1,100) <= 89) ? 1 : 0
+                if(DoDrop == 1){
+                    ClassStr = ZClass[I,string]
+                    IsBoss = (ClassStr == "npc_antlionguard" || ClassStr == "npc_hunter") ? 1 : 0
+
+                    Roll = random(1,100)
+                    Cumulative = 0
+                    DropItem = ""
+                    J = 1
+                    if(IsBoss == 1){
+                        while(J <= BossLootChance:count()){
+                            Cumulative += BossLootChance[J,number]
+                            if(Roll <= Cumulative){
+                                DropItem = LootItems[J,string]
+                                break
+                            }
+                            J++
+                        }
+                    } else {
+                        while(J <= LootChance:count()){
+                            Cumulative += LootChance[J,number]
+                            if(Roll <= Cumulative){
+                                DropItem = LootItems[J,string]
+                                break
+                            }
+                            J++
+                        }
+                    }
+                    if(DropItem != ""){
+                        propSpawn(DropItem, ZPos[I,vector] + vec(0,0,10), ang(0,0,0), 0)
+                    }
+                }
+            }
+            Z[I] = noentity()
+            ZPos[I,vector] = vec(0,0,0)
+            ZClass[I,string] = ""
+        }
+        I++
+    }
+
+    # -------- Bonus-Slots (Over Cap) --------
+    I = 1
+    while(I <= SpecialE:count()){
+        SEnt = SpecialE[I,entity]
+        if(SEnt:isValid()){
+            Alive++
+            if(I <= SpecialPos:count()){
+                SpecialPos[I,vector] = SEnt:pos()
+            }
+            I++
+        } else {
+            if(SEnt != noentity()){
+                TotalKilled++
+                XP += 20 + Wave * 5
+
+                DoDrop2 = (random(1,100) <= 70) ? 1 : 0
+                if(DoDrop2 == 1){
+                    Roll2 = random(1,100)
+                    Cumulative2 = 0
+                    DropItem2 = ""
+                    J2 = 1
+                    while(J2 <= LootChance:count()){
+                        Cumulative2 += LootChance[J2,number]
+                        if(Roll2 <= Cumulative2){
+                            DropItem2 = LootItems[J2,string]
+                            break
+                        }
+                        J2++
+                    }
+                    Pos2 = (I <= SpecialPos:count()) ? SpecialPos[I,vector] : entity():pos()
+                    if(DropItem2 != ""){
+                        propSpawn(DropItem2, Pos2 + vec(0,0,10), ang(0,0,0), 0)
+                    }
+                }
+            }
+            SpecialE:remove(I)
+            if(I <= SpecialPos:count()){ SpecialPos:remove(I) }
+        }
+    }
+
+    # -------- Boss-Alive?: Trickle stop--------
+    if(Wave % 10 == 0){
+        BossAlive = 0
+        I = 1
+        while(I <= BossE:count()){
+            BEnt = BossE[I,entity]
+            if(BEnt:isValid()){
+                BossAlive++
+                I++
+            } else {
+                BossE:remove(I)
+            }
+        }
+        if(TrickleActive == 1 && BossAlive <= 0){
+            TrickleActive = 0
+            TrickleRemaining = 0
+            TrickleNext = 0
+            print("Boss defeated! Their Minions stopped spawning.")
+        }
+    }
+
+if(LastAlive > 0 && Alive == 0 && Wave > 0){
+    if(Wave == NextBigPauseWave && NeutralizedAnnouncedWave != Wave){
+        print("Waves neutralized, take a moment to recover...")
+        NeutralizedAnnouncedWave = Wave
+
+        # 10-cycle Fix: 3,6,10,13,16,20,23,26,30,...
+        WMod = Wave % 10
+        if(WMod == 3){
+            NextBigPauseWave = Wave + 3      # 3 -> 6
+        }elseif(WMod == 6){
+            NextBigPauseWave = Wave + 4      # 6 -> 10 (Boss)
+        }elseif(WMod == 0){
+            NextBigPauseWave = Wave + 3      # 10 -> 13 (nchster Zyklus)
+        }else{
+            # Safety/Fallback 
+            NextBigPauseWave = (Wave - WMod) + 13
+        }
+    }
+}
+LastAlive = Alive
+    # -------- Countdown & Prints --------
+    if(Alive == 0 && Countdown > 0){
+        Countdown--
+        if(Countdown <= 5 && Countdown > 0 && Countdown != LastPrint){
+            print((Wave % 10 == 9 ? "Boss wave starting in: " : "Next wave in: ") + Countdown + "...")
+            LastPrint = Countdown
+        }
+        if(Countdown > 5 && Countdown % 10 == 0 && Countdown != LastPrint){
+            print("Next wave in: " + Countdown + " seconds...")
+            LastPrint = Countdown
+        }
+    }
+
+    # -------- Boss-Minions Trickle (s) --------
+    if(TrickleActive == 1){
+        if(TrickleNext > 0){
+            TrickleNext--
+        } else {
+            FreeIndex = 0
+            K = 1
+            while(K <= 20){
+                if(!Z[K,entity]:isValid()){
+                    FreeIndex = K
+                    break
+                }
+                K++
+            }
+            if(FreeIndex > 0 && TrickleRemaining > 0){
+                #safe pos
+                Attempts = 0
+                Found = 0
+                while(Attempts < 25 && Found == 0){
+                    CPos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                    TooClose = 0
+                    # checks if to close
+                    C = 1
+                    while(C <= 20){
+                        if(Z[C,entity]:isValid()){
+                            if((ZPos[C,vector] - CPos):length() < MinDistNormal){ TooClose = 1, break }
+                        }
+                        C++
+                    }
+                    # checks again specials
+                    if(TooClose == 0){
+                        C = 1
+                        while(C <= SpecialE:count()){
+                            if(SpecialE[C,entity]:isValid()){
+                                if(C <= SpecialPos:count()){
+                                    if((SpecialPos[C,vector] - CPos):length() < MinDistNormal){ TooClose = 1, break }
+                                }
+                            }
+                            C++
+                        }
+                    }
+                    # checks if spawn is planned
+                    if(TooClose == 0){
+                        C = 1
+                        while(C <= TmpSpawn:count()){
+                            if((TmpSpawn[C,vector] - CPos):length() < MinDistNormal){ TooClose = 1, break }
+                            C++
+                        }
+                    }
+                    if(TooClose == 0){
+                        Found = 1
+                        TPos = CPos
+                        TmpSpawn:pushVector(TPos)
+                    }
+                    Attempts++
+                }
+                if(Found == 0){
+                    TPos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                }
+
+                TType = (random(1,100) <= 50) ? "npc_zombie_torso" : "npc_zombie"
+                TEnt = npcSpawn(TType, TPos)
+                if(TEnt:isValid()){
+                    Z[FreeIndex] = TEnt
+                    ZPos[FreeIndex,vector] = TPos
+                    ZClass[FreeIndex,string] = TType
+                    TrickleRemaining--
+                }
+            }
+            TrickleNext = random(2,4)
+            if(TrickleRemaining <= 0){ TrickleActive = 0 }
+        }
+    }
+
+    # -------- New Wave --------
+    if(Alive == 0 && Countdown <= 0){
+        Wave++
+        print("Wave " + Wave + " started!")
+
+       
+        TmpSpawn = array()
+
+        Spawned = 0
+        I = 1
+
+        if(Wave % 10 == 0){
+            # Boss-RNG
+            BossType = (random(1,100) <= 50) ? "npc_antlionguard" : "npc_hunter"
+
+            NumZombies = 2 + (random(1,100) <= 20 ? 1 : 0)
+            while(Spawned < NumZombies && I <= 20){
+                # safe  pos
+                AttemptsB = 0
+                FoundB = 0
+                while(AttemptsB < 25 && FoundB == 0){
+                    CPosB = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                    TooCloseB = 0
+                    C = 1
+                    while(C <= 20){
+                        if(Z[C,entity]:isValid()){
+                            if((ZPos[C,vector] - CPosB):length() < MinDistBoss){ TooCloseB = 1, break }
+                        }
+                        C++
+                    }
+                    if(TooCloseB == 0){
+                        C = 1
+                        while(C <= SpecialE:count()){
+                            if(SpecialE[C,entity]:isValid()){
+                                if(C <= SpecialPos:count()){
+                                    if((SpecialPos[C,vector] - CPosB):length() < MinDistBoss){ TooCloseB = 1, break }
+                                }
+                            }
+                            C++
+                        }
+                    }
+                    if(TooCloseB == 0){
+                        C = 1
+                        while(C <= TmpSpawn:count()){
+                            if((TmpSpawn[C,vector] - CPosB):length() < MinDistBoss){ TooCloseB = 1, break }
+                            C++
+                        }
+                    }
+                    if(TooCloseB == 0){
+                        FoundB = 1
+                        Pos = CPosB
+                        TmpSpawn:pushVector(Pos)
+                    }
+                    AttemptsB++
+                }
+                if(FoundB == 0){
+                    Pos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                }
+
+                Zomb = npcSpawn(BossType, Pos)
+                if(Zomb:isValid()){
+                    Z[I] = Zomb
+                    ZPos[I,vector] = Pos
+                    ZClass[I,string] = BossType
+                    BossE:pushEntity(Zomb)
+                    Spawned++
+                    I++
+                } else {
+                    I++
+                }
+            }
+
+            # 3 ExplosiveHelper
+            H = 1
+            while(H <= 3){
+                HPos = entity():pos() + vec(random(-260,260), random(-260,260), 20)
+                propSpawn("models/props_c17/oildrum001_explosive.mdl", HPos, ang(0,0,0), 0)
+                H++
+            }
+
+            # Trickle
+            TrickleActive = 1
+            TrickleRemaining = 10
+            TrickleNext = random(2,4)
+
+            
+            NextBigPauseWave = Wave
+
+            Countdown = 60
+            LastPrint = -1
+            print("Boss spawned! (" + BossType + ")")
+        } else {
+            # --- ButaneHelper ---
+            if((Wave % 10) == 1){
+                MinButaneDist = 15
+
+                # Can 1
+                BPos1 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
+                propSpawn("models/props_explosive/explosive_butane_can.mdl", BPos1, ang(0,0,0), 0)
+
+                # Can 2 
+                AttemptsBC2 = 0
+                FoundBC2 = 0
+                while(AttemptsBC2 < 40 && FoundBC2 == 0){
+                    BTry2 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
+                    if((BPos1 - BTry2):length() >= MinButaneDist){
+                        FoundBC2 = 1
+                        BPos2 = BTry2
+                    }
+                    AttemptsBC2++
+                }
+                if(FoundBC2 == 0){
+                    BPos2 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
+                }
+                propSpawn("models/props_explosive/explosive_butane_can.mdl", BPos2, ang(0,0,0), 0)
+
+                # Can 3 
+                AttemptsBC3 = 0
+                FoundBC3 = 0
+                while(AttemptsBC3 < 60 && FoundBC3 == 0){
+                    BTry3 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
+                    TooCloseBC3 = 0
+                    if((BPos1 - BTry3):length() < MinButaneDist){ TooCloseBC3 = 1 }
+                    if(TooCloseBC3 == 0){
+                        if((BPos2 - BTry3):length() < MinButaneDist){ TooCloseBC3 = 1 }
+                    }
+                    if(TooCloseBC3 == 0){
+                        FoundBC3 = 1
+                        BPos3 = BTry3
+                    }
+                    AttemptsBC3++
+                }
+                if(FoundBC3 == 0){
+                    BPos3 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
+                }
+                propSpawn("models/props_explosive/explosive_butane_can.mdl", BPos3, ang(0,0,0), 0)
+            }
+            
+            # Normal Zombies
+            NumZombies = round(5 * (25/5)^((Wave-1)/9))
+            if(NumZombies > 25){ NumZombies = 25 }
+
+            while(Spawned < NumZombies && I <= 20){
+                # safe pos
+                AttemptsN = 0
+                FoundN = 0
+                while(AttemptsN < 25 && FoundN == 0){
+                    CPosN = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                    TooCloseN = 0
+                    C = 1
+                    while(C <= 20){
+                        if(Z[C,entity]:isValid()){
+                            if((ZPos[C,vector] - CPosN):length() < MinDistNormal){ TooCloseN = 1, break }
+                        }
+                        C++
+                    }
+                    if(TooCloseN == 0){
+                        C = 1
+                        while(C <= SpecialE:count()){
+                            if(SpecialE[C,entity]:isValid()){
+                                if(C <= SpecialPos:count()){
+                                    if((SpecialPos[C,vector] - CPosN):length() < MinDistNormal){ TooCloseN = 1, break }
+                                }
+                            }
+                            C++
+                        }
+                    }
+                    if(TooCloseN == 0){
+                        C = 1
+                        while(C <= TmpSpawn:count()){
+                            if((TmpSpawn[C,vector] - CPosN):length() < MinDistNormal){ TooCloseN = 1, break }
+                            C++
+                        }
+                    }
+                    if(TooCloseN == 0){
+                        FoundN = 1
+                        Pos = CPosN
+                        TmpSpawn:pushVector(Pos)
+                    }
+                    AttemptsN++
+                }
+                if(FoundN == 0){
+                    Pos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                }
+
+                Roll = random(1,100)
+                if(Wave <= 2){ Type = (Roll <= 50) ? "npc_zombie_torso" : "npc_fastzombie_torso" }
+                elseif(Wave <= 5){ Type = (Roll <= 50) ? "npc_zombie" : "npc_fastzombie" }
+                elseif(Wave <= 8){ Type = (Roll <= 40) ? "npc_zombie" : "npc_fastzombie" }
+                else{ Type = (Roll <= 30) ? "npc_zombie" : "npc_fastzombie" }
+
+                ZEnt = npcSpawn(Type, Pos)
+                if(ZEnt:isValid()){
+                    Z[I] = ZEnt
+                    ZPos[I,vector] = Pos
+                    ZClass[I,string] = Type
+                    Spawned++
+                    I++
+                } else {
+                    I++
+                }
+            }
+
+            # 5% Bonus-Spawns (Poison/Zombine)  
+            if(random(1,100) <= 5){
+                AttemptsP = 0
+                FoundP = 0
+                while(AttemptsP < 25 && FoundP == 0){
+                    CPosP = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                    TooCloseP = 0
+                    C = 1
+                    while(C <= 20){
+                        if(Z[C,entity]:isValid()){
+                            if((ZPos[C,vector] - CPosP):length() < MinDistNormal){ TooCloseP = 1, break }
+                        }
+                        C++
+                    }
+                    if(TooCloseP == 0){
+                        C = 1
+                        while(C <= SpecialE:count()){
+                            if(SpecialE[C,entity]:isValid()){
+                                if(C <= SpecialPos:count()){
+                                    if((SpecialPos[C,vector] - CPosP):length() < MinDistNormal){ TooCloseP = 1, break }
+                                }
+                            }
+                            C++
+                        }
+                    }
+                    if(TooCloseP == 0){
+                        C = 1
+                        while(C <= TmpSpawn:count()){
+                            if((TmpSpawn[C,vector] - CPosP):length() < MinDistNormal){ TooCloseP = 1, break }
+                            C++
+                        }
+                    }
+                    if(TooCloseP == 0){
+                        FoundP = 1
+                        PPos = CPosP
+                        TmpSpawn:pushVector(PPos)
+                    }
+                    AttemptsP++
+                }
+                if(FoundP == 0){
+                    PPos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                }
+                PZ = npcSpawn("npc_poisonzombie", PPos)
+                if(PZ:isValid()){
+                    SpecialE:pushEntity(PZ)
+                    SpecialPos:pushVector(PPos)
+                    print("A Poison Zombie has spawned! (Bonus-Spawn)")
+                }
+            }
+            if(random(1,100) <= 5){
+                AttemptsZB = 0
+                FoundZB = 0
+                while(AttemptsZB < 25 && FoundZB == 0){
+                    CPosZB = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                    TooCloseZB = 0
+                    C = 1
+                    while(C <= 20){
+                        if(Z[C,entity]:isValid()){
+                            if((ZPos[C,vector] - CPosZB):length() < MinDistNormal){ TooCloseZB = 1, break }
+                        }
+                        C++
+                    }
+                    if(TooCloseZB == 0){
+                        C = 1
+                        while(C <= SpecialE:count()){
+                            if(SpecialE[C,entity]:isValid()){
+                                if(C <= SpecialPos:count()){
+                                    if((SpecialPos[C,vector] - CPosZB):length() < MinDistNormal){ TooCloseZB = 1, break }
+                                }
+                            }
+                            C++
+                        }
+                    }
+                    if(TooCloseZB == 0){
+                        C = 1
+                        while(C <= TmpSpawn:count()){
+                            if((TmpSpawn[C,vector] - CPosZB):length() < MinDistNormal){ TooCloseZB = 1, break }
+                            C++
+                        }
+                    }
+                    if(TooCloseZB == 0){
+                        FoundZB = 1
+                        ZBPos = CPosZB
+                        TmpSpawn:pushVector(ZBPos)
+                    }
+                    AttemptsZB++
+                }
+                if(FoundZB == 0){
+                    ZBPos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                }
+                ZB = npcSpawn("npc_zombine", ZBPos)
+                if(ZB:isValid()){
+                    SpecialE:pushEntity(ZB)
+                    SpecialPos:pushVector(ZBPos)
+                    print("Oh no a Zombine! (Bonus-Spawn)")
+                }
+            }
+
+            
+            while(BossE:count() > 0){ BossE:remove(1) }
+
+            TrickleActive = 0
+            TrickleRemaining = 0
+            TrickleNext = 0
+
+            # Pauselogic  modul-based cause thats based (3/6 = 60s, else 6s)
+            WModStart = Wave % 10
+            if(WModStart == 3){
+                Countdown = 60
+                NextBigPauseWave = Wave
+            }elseif(WModStart == 6){
+                Countdown = 60
+                NextBigPauseWave = Wave
+            }else{
+                Countdown = 6
+            }
+            LastPrint = -1
+        }
+    }
+}
+
+Alive = Alive
+Wave = Wave
+Countdown = Countdown
+XP = XP
+TotalKilled = TotalKilled
