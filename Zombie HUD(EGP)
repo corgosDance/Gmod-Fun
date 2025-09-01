@@ -1,0 +1,622 @@
+@name Zombie HUD(EGPScreen) + Pause Overlay by corgosDance
+@inputs XP TotalKilled Wave Alive Countdown E:wirelink Run
+@persist XPBarCurrentWidth PrevLevel LevelUpBlinkCount LevelUpBlinkState Drops:array SideDrops:array DropWidth DropCount DropMinLength DropMaxLength DropMinSpeed DropMaxSpeed BlinkColors:array BloodBubbles:array BubbleCount PoolHeight
+@persist PauseInit PauseDropY:array PauseSpeed:array PauseLen:array PauseWid:array PauseBaseX:array PauseFogPos:array PauseFogVel:array PauseFogInit
+@trigger none
+
+# ---------------- HUD Layout ----------------
+TitlePos = vec2(80, 40)
+TitleFontSize = 42
+Left = 30
+ColA = vec2(Left, 100)
+ColB = vec2(Left + 220, 100)
+
+XPBarPos = vec2(60, 410)
+XPBarSize = vec2(380, 28)
+XPBarBGColor = vec4(200,0,0,235)
+XPBarFGColor = vec(220,150,40)
+
+# Textfarben (vec4)
+TitleColor = vec4(255,100,100,255)
+TextColor = vec4(255,50,50,255)
+LabelColor = vec4(200,100,100,255)
+
+# ---------------- Drops / Pool ----------------
+DropWidth = 4
+DropCount = 23
+DropMinLength = 12
+DropMaxLength = 28
+DropMinSpeed = 1
+DropMaxSpeed = 1
+
+BubbleCount = 8
+PoolHeight = 13
+
+# ---------------- EGP IDs ----------------
+ID_DROP_BASE = 100
+ID_SIDE_DROP_BASE = 150
+ID_POOL = 200
+ID_BUBBLE_BASE = 220
+ID_SPLASH_BASE = 300
+ID_XPBAR_FILL = 21
+ID_XPBAR_OUTLINE = 20
+
+# ---------------- PAUSE Overlay (IDs < 100) ----------------
+PauseOverlayID  = 60
+PauseTextID     = 61
+PauseDropBaseID = 62     # uses 62..(62+PauseDropCount-1)
+
+# Position Overlay
+PauseCenter      = vec2(240, 240)
+OverlaySize      = vec2(960, 960)
+
+# Drops-Parameters
+PauseDropCount   = 10
+DropAreaWidth    = 330
+DropStartYOffset = 17
+DropDepth        = 20
+
+DropLenMin       = 15
+DropLenMax       = 35
+DropWidthMin     = 5
+DropWidthMax     = 8
+
+# (Timer 100ms -> 10 Ticks/s; 0.2..0.5 px/Tick = ~2..5 px/s)
+SpeedMinPx       = 0.2
+SpeedMaxPx       = 0.5
+
+if(first()){
+    XPBarCurrentWidth = 0
+    PrevLevel = 1
+    LevelUpBlinkCount = 0
+    LevelUpBlinkState = 1
+
+    # Pause-Arrays
+    PauseInit = 0
+    PauseDropY = array()
+    PauseSpeed = array()
+    PauseLen   = array()
+    PauseWid   = array()
+    PauseBaseX = array()
+
+    # LVLUPFLASH colors
+    BlinkColors = array()
+    BlinkColors:pushVector4(vec4(255,215,0,150))
+    BlinkColors:pushVector4(vec4(255,0,0,150))
+    BlinkColors:pushVector4(vec4(0,255,0,150))
+    BlinkColors:pushVector4(vec4(0,255,255,150))
+
+        # >>> INIT fr async Drops
+    Drops        = array()
+    DropPhase    = array()
+    DropWobAmp   = array()
+    DropWobFreq  = array()
+    DropWobPhase = array()
+    DropPause    = array()
+
+    I = 1
+    while (I <= DropCount) {
+        Xpos = random(XPBarPos[1], XPBarPos[1] + XPBarSize[1])
+        Ypos = random(XPBarPos[2], XPBarPos[2] + XPBarSize[2])
+
+        Len  = random(DropMinLength, DropMaxLength)
+        Spd  = random(DropMinSpeed, DropMaxSpeed)
+
+        Drops:pushVector2(vec2(Xpos, Ypos))
+        Drops:pushNumber(Len)
+        Drops:pushNumber(Spd)
+
+        DropPhase:pushNumber(random(6.28318))
+        DropWobAmp:pushNumber(random(0.5, 2.0))
+        DropWobFreq:pushNumber(random(0.6, 1.8))
+        DropWobPhase:pushNumber(random(6.28318))
+        DropPause:pushNumber(random(0, 6))
+
+        I = I + 1
+    }
+
+
+    # Side-Drops 
+    SideDrops = array()
+    # leftdrop
+    SideDrops:pushVector2(vec2(XPBarPos[1], XPBarPos[2] - PoolHeight - 12))
+    SideDrops:pushNumber(45)
+    SideDrops:pushNumber(0.5)
+    # rightside drop
+    SideDrops:pushVector2(vec2(XPBarPos[1] + XPBarSize[1], XPBarPos[2] - PoolHeight - 12))
+    SideDrops:pushNumber(45)
+    SideDrops:pushNumber(0.5)
+
+    # Blood Bubbles above pool
+    BloodBubbles = array()
+    I = 1
+    while(I <= BubbleCount){
+        BX = random(XPBarPos[1], XPBarPos[1] + XPBarSize[1])
+        BY = XPBarPos[2] - PoolHeight - random(10,30)
+        BSize = random(3,7)
+        BSpd  = random(1,3)
+        BloodBubbles:pushVector2(vec2(BX, BY))
+        BloodBubbles:pushNumber(BSize)
+        BloodBubbles:pushNumber(BSpd)
+        I = I + 1
+    }
+
+    # EGP go mess around
+    E:egpClear()
+
+    # Titel
+    E:egpText(1, "corgos Zombie Farmer", TitlePos)
+    E:egpFont(1, "Arial", TitleFontSize)
+    E:egpColor(1, TitleColor)
+
+    # Level / XP Text
+    E:egpText(2, "Level:", ColA + vec2(150,190))
+    E:egpFont(2, "Arial", 40)
+    E:egpColor(2, LabelColor)
+    E:egpText(3, "0", ColA + vec2(255,190))
+    E:egpFont(3, "Arial", 40)
+    E:egpColor(3, TextColor)
+
+    E:egpText(4, "XP:", ColA + vec2(150,250))
+    E:egpFont(4, "Arial", 24)
+    E:egpColor(4, LabelColor)
+    E:egpText(5, "0 / 0", ColA + vec2(190,250))
+    E:egpFont(5, "Arial", 24)
+    E:egpColor(5, TextColor)
+
+    # Total Killed
+    E:egpText(8, "Total Killed:", ColB + vec2(-100,150))
+    E:egpFont(8, "Arial", 28)
+    E:egpColor(8, LabelColor)
+    E:egpText(9, "0", ColB + vec2(60,150))
+    E:egpFont(9, "Arial", 28)
+    E:egpColor(9, TextColor)
+
+    # Wave / Alive / Countdown
+    E:egpText(10, "Wave:", vec2(Left,130))
+    E:egpFont(10, "Arial", 22)
+    E:egpColor(10, LabelColor)
+    E:egpText(11, "0", vec2(Left+70,130))
+    E:egpFont(11, "Arial", 22)
+    E:egpColor(11, TextColor)
+
+    E:egpText(12, "Alive:", vec2(Left,160))
+    E:egpFont(12, "Arial", 22)
+    E:egpColor(12, LabelColor)
+    E:egpText(13, "0", vec2(Left+60,160))
+    E:egpFont(13, "Arial", 22)
+    E:egpColor(13, TextColor)
+
+    E:egpText(14, "Next Wave:", vec2(Left+120,190))
+    E:egpFont(14, "Arial", 38)
+    E:egpColor(14, LabelColor)
+    E:egpText(15, "-", vec2(Left+300,190))
+    E:egpFont(15, "Arial", 38)
+    E:egpColor(15, TextColor)
+
+    # XP-Bar Outline & Fill
+    E:egpBoxOutline(ID_XPBAR_OUTLINE, XPBarPos + vec2(XPBarSize[1]/2,0), XPBarSize)
+    E:egpColor(ID_XPBAR_OUTLINE, XPBarBGColor)
+    E:egpBox(ID_XPBAR_FILL, XPBarPos, vec2(0, XPBarSize[2]))
+    E:egpColor(ID_XPBAR_FILL, XPBarFGColor)
+
+    timer("hud",100)
+}
+
+if(clk("hud")){
+    # Splash reset (Bubbles)
+    K = 0
+    while(K < BubbleCount*3){
+        E:egpCircle(ID_SPLASH_BASE + K, vec2(0,0), vec2(0,0))
+        K = K + 1
+    }
+
+    # Attributes
+    XPval = XP ? XP : 0
+    TotalVal = TotalKilled ? TotalKilled : 0
+    WaveVal = Wave ? Wave : 0
+    AliveVal = Alive ? Alive : 0
+    CountdownVal = Countdown ? Countdown : 0
+
+    # Level calculation
+    LevelVal = 1
+    RemainingXP = XPval
+    XPNeeded = 300
+    while(RemainingXP >= XPNeeded){
+        RemainingXP = RemainingXP - XPNeeded
+        LevelVal = LevelVal + 1
+        XPNeeded = 300 * (2 ^ (1.3 * log2(LevelVal)))
+    }
+    CurrentLevelXP = RemainingXP
+    NextLevelXP = max(XPNeeded,1)
+    XPPercent = clamp(CurrentLevelXP/NextLevelXP,0,1)
+
+    if(PrevLevel != LevelVal){
+        PrevLevel = LevelVal
+        XPBarCurrentWidth = 0
+        LevelUpBlinkCount = 10
+        LevelUpBlinkState = 1
+    }
+
+    # Text update
+    E:egpSetText(3, toString(LevelVal))
+    E:egpSetText(5, toString(floor(CurrentLevelXP)) + " / " + toString(floor(NextLevelXP)))
+    E:egpSetText(9, toString(TotalVal))
+    E:egpSetText(11, toString(WaveVal))
+    E:egpSetText(13, toString(AliveVal))
+
+    # Countdown
+    if(CountdownVal <= 0){
+        E:egpSetText(15,"Ready")
+    } else {
+        if(CountdownVal >= 60){
+            Mins = floor(CountdownVal/60)
+            Secs = CountdownVal%60
+            SecStr = Secs<10 ? "0"+toString(Secs) : toString(Secs)
+            E:egpSetText(15, toString(Mins) + "m " + SecStr)
+        } else {
+            E:egpSetText(15, toString(CountdownVal) + "s")
+        }
+    }
+
+    # Level-Up Flash
+    if(LevelUpBlinkCount>0){
+        RandIdx = random(1,BlinkColors:count())
+        FlashColor = BlinkColors[RandIdx, vector4]
+        FlashCenter = XPBarPos + vec2(XPBarSize[1]/2,0)
+        if(LevelUpBlinkState==1){
+            E:egpBox(30, FlashCenter, vec2(XPBarSize[1], XPBarSize[2]))
+            E:egpColor(30, FlashColor)
+        } else {
+            E:egpBox(30, vec2(0,0), vec2(0,0))
+        }
+        LevelUpBlinkState = 1 - LevelUpBlinkState
+        if(LevelUpBlinkState==1){ LevelUpBlinkCount = LevelUpBlinkCount -1 }
+    } else {
+        E:egpBox(30, vec2(0,0), vec2(0,0))
+    }
+
+    # Bloodpool above XPBar
+    PoolCenter = XPBarPos + vec2(XPBarSize[1]/2, -PoolHeight/2 - 13)
+    E:egpBox(ID_POOL, PoolCenter, vec2(XPBarSize[1], PoolHeight))
+    Pulse = 20*sin(curtime()*2)
+    PoolColor = vec4(120 + Pulse, 0,0,200)
+    E:egpColor(ID_POOL, PoolColor)
+
+    #Async Drops
+I = 1
+while (I <= DropCount) {
+    BaseIdx  = (I-1)*3 + 1
+    Pos      = Drops[BaseIdx, vector2]
+    DropLen  = Drops[BaseIdx + 1, number]
+    DropSpd  = Drops[BaseIdx + 2, number]
+
+    Phase    = DropPhase[I, number]
+    WobAmp   = DropWobAmp[I, number]
+    WobFreq  = DropWobFreq[I, number]
+    WobPhase = DropWobPhase[I, number]
+    PauseT   = DropPause[I, number]
+
+    
+    if (PauseT > 0) {
+        PauseT = PauseT - 1
+    } else {
+        
+        Mod = 0.9 + 0.3 * sin(curtime() * (0.8 + 0.6 * sin(Phase)) + WobPhase)
+        EffSpd = max(0.1, DropSpd * Mod)
+
+        Pos[2] = Pos[2] + EffSpd
+
+        
+        Pos[1] = Pos[1] + WobAmp * 0.06 * sin(curtime()*WobFreq + WobPhase)
+    }
+
+    
+    if (Pos[2] > XPBarPos[2] + XPBarSize[2]) {
+        Pos[1]   = random(XPBarPos[1], XPBarPos[1] + XPBarSize[1])
+        Pos[2]   = XPBarPos[2] - DropLen
+        DropLen  = random(DropMinLength, DropMaxLength)
+        DropSpd  = random(DropMinSpeed, DropMaxSpeed)
+
+        Phase    = random(6.28318)
+        WobAmp   = random(0.5, 2.0)
+        WobFreq  = random(0.6, 1.8)
+        WobPhase = random(6.28318)
+        PauseT   = random(0, 6)   
+    }
+
+    
+    DrawPos = Pos + vec2(0, DropLen/2)
+    E:egpBox(ID_DROP_BASE + I, DrawPos, vec2(DropWidth, DropLen))
+    E:egpColor(ID_DROP_BASE + I, vec4(180, 0, 0, 200))
+
+    
+    Drops[BaseIdx, vector2]        = Pos
+    Drops[BaseIdx + 1, number]     = DropLen
+    Drops[BaseIdx + 2, number]     = DropSpd
+
+    DropPhase[I, number]           = Phase
+    DropWobAmp[I, number]          = WobAmp
+    DropWobFreq[I, number]         = WobFreq
+    DropWobPhase[I, number]        = WobPhase
+    DropPause[I, number]           = PauseT
+
+    I = I + 1
+}
+
+
+    # Stationary long Side-Drops 
+    LongSideDropWidth = 6
+    LongSideDropLen   = 40
+    LongSideDropOffsetY = -PoolHeight - 14
+
+    # left
+    LeftLongDropPos = vec2(XPBarPos[1], XPBarPos[2] + LongSideDropOffsetY)
+    DrawPos = LeftLongDropPos + vec2(0, LongSideDropLen/2)
+    E:egpBox(ID_SIDE_DROP_BASE+3, DrawPos, vec2(LongSideDropWidth, LongSideDropLen))
+    E:egpColor(ID_SIDE_DROP_BASE+3, vec4(120,0,0,200))
+
+    # right
+    RightLongDropPos = vec2(XPBarPos[1]+XPBarSize[1], XPBarPos[2] + LongSideDropOffsetY)
+    DrawPos = RightLongDropPos + vec2(0, LongSideDropLen/2)
+    E:egpBox(ID_SIDE_DROP_BASE+4, DrawPos, vec2(LongSideDropWidth, LongSideDropLen))
+    E:egpColor(ID_SIDE_DROP_BASE+4, vec4(120,0,0,200))
+
+    # Animated Side-Drops
+    SideDropWidth = 5
+    SideDropLen = 45
+    SideDropSpeed = 0.5
+
+    # left
+    LeftDropPos = SideDrops[1, vector2]
+    LeftDropPos[2] = LeftDropPos[2] + SideDropSpeed
+    if(LeftDropPos[2] > XPBarPos[2] + XPBarSize[2]){
+        LeftDropPos[2] = XPBarPos[2] - PoolHeight - 12
+    }
+    DrawPos = LeftDropPos + vec2(0, SideDropLen/2)
+    E:egpBox(ID_SIDE_DROP_BASE+1, DrawPos, vec2(SideDropWidth, SideDropLen))
+    E:egpColor(ID_SIDE_DROP_BASE+1, vec4(180,0,0,200))
+    SideDrops[1, vector2] = LeftDropPos
+
+    # right
+    RightDropPos = SideDrops[4, vector2]
+    RightDropPos[2] = RightDropPos[2] + SideDropSpeed
+    if(RightDropPos[2] > XPBarPos[2] + XPBarSize[2]){
+        RightDropPos[2] = XPBarPos[2] - PoolHeight - 12
+    }
+    DrawPos = RightDropPos + vec2(0, SideDropLen/2)
+    E:egpBox(ID_SIDE_DROP_BASE+2, DrawPos, vec2(SideDropWidth, SideDropLen))
+    E:egpColor(ID_SIDE_DROP_BASE+2, vec4(180,0,0,200))
+    SideDrops[4, vector2] = RightDropPos
+
+    # Blood Bubbles & Splashes
+    I = 1
+    while(I <= BubbleCount){
+        BBase = (I-1)*3 + 1
+        BPos = BloodBubbles[BBase, vector2]
+        BSize = BloodBubbles[BBase+1, number]
+        BSpd = BloodBubbles[BBase+2, number]
+
+        BPos[2] = BPos[2] - BSpd
+
+        if(BPos[2] < XPBarPos[2] - PoolHeight - 20){
+            J = 1
+            while(J <= 3){
+                Offset = vec2(random(-6,6), random(-2,2))
+                SplashPos = vec2(BPos[1], XPBarPos[2] - PoolHeight) + Offset
+                SplashSize = random(2,4)
+                E:egpCircle(ID_SPLASH_BASE + (I-1)*3 + J, SplashPos, vec2(SplashSize, SplashSize))
+                E:egpColor(ID_SPLASH_BASE + (I-1)*3 + J, vec4(255,40,40,200))
+                J = J + 1
+            }
+
+            BPos[1] = random(XPBarPos[1], XPBarPos[1]+XPBarSize[1])
+            BPos[2] = XPBarPos[2] - PoolHeight - random(10,30)
+            BSize = random(3,7)
+            BSpd = random(1,3)
+        } else {
+            E:egpCircle(ID_BUBBLE_BASE+I, BPos, vec2(BSize,BSize))
+            E:egpColor(ID_BUBBLE_BASE+I, vec4(255,0,0,180))
+        }
+
+        BloodBubbles[BBase, vector2] = BPos
+        BloodBubbles[BBase+1, number] = BSize
+        BloodBubbles[BBase+2, number] = BSpd
+
+        I = I + 1
+    }
+
+    # XP-Bar Fill Animation
+    TargetWidth = XPBarSize[1]*XPPercent
+    Speed = XPBarSize[1]*0.05
+    XPBarCurrentWidth = XPBarCurrentWidth < TargetWidth ? min(XPBarCurrentWidth+Speed, TargetWidth) : max(XPBarCurrentWidth-Speed, TargetWidth)
+    FillCenter = XPBarPos + vec2(XPBarCurrentWidth/2,0)
+    FillSize = vec2(XPBarCurrentWidth,XPBarSize[2])
+    E:egpBox(ID_XPBAR_FILL, FillCenter, FillSize)
+    E:egpColor(ID_XPBAR_FILL, XPBarFGColor)
+
+    # ---------------- PAUSE OVERLAY  ----------------
+    RunVal = Run ? 1 : 0
+
+    # IDs/Layer fr PAUSE
+    PauseOverlayID  = 60        # ABove All
+    PauseFogBaseID  = 70        # Fog
+    PauseDropBaseID = 90        # Blood drops over Fog
+    PauseTextID     = 100       # Text above
+
+    # Layout/Param
+    PauseCenter      = vec2(240, 240)
+    OverlaySize      = vec2(960, 960)
+
+    # Fog-Param 
+    PauseFogCount    = 20
+    FogArea          = vec2(260, 140)   # Breite x Hhe
+    FogOffset        = vec2(0, 24)      # leicht unter "PAUSE"
+
+    # Drip-Param (async)
+    PauseDropCount   = 6
+    DropAreaWidth    = 396
+    DropStartYOffset = 3
+    DropDepth        = 35
+    DropLenMin       = 25
+    DropLenMax       = 45
+    DropWidthMin     = 2
+    DropWidthMax     = 6
+    SpeedMinPx       = 0.1
+    SpeedMaxPx       = 0.4
+
+    if (RunVal == 0) {
+        # Overlay (vocers HUD)
+        E:egpBox(PauseOverlayID, PauseCenter, OverlaySize)
+        E:egpColor(PauseOverlayID, vec4(0,0,0,255))
+
+        # --- Fog initialisier(once lol) ---
+        if (PauseFogInit != 1) {
+            PauseFogPos = array()
+            PauseFogVel = array()
+            I = 1
+            while (I <= PauseFogCount) {
+                PX = PauseCenter[1] - FogArea[1]/2 + random(FogArea[1])
+                PY = PauseCenter[2] + FogOffset[2] - FogArea[2]/2 + random(FogArea[2])
+                PauseFogPos:pushVector2(vec2(PX, PY))
+                VX = (random(16)-8)/100
+                VY = (random(16)-8)/100
+                PauseFogVel:pushVector2(vec2(VX, VY))
+                I = I + 1
+            }
+            PauseFogInit = 1
+        }
+
+        # --- fog update/draw new  ---
+        I = 1
+        while (I <= PauseFogCount) {
+            P = PauseFogPos[I, vector2]
+            V = PauseFogVel[I, vector2]
+
+            if (random(100) < 3) {
+                V = V + vec2((random(10)-5)/300, (random(10)-5)/300)
+                if (V[1] > 0.12) { V[1] = 0.12 } elseif (V[1] < -0.12) { V[1] = -0.12 }
+                if (V[2] > 0.12) { V[2] = 0.12 } elseif (V[2] < -0.12) { V[2] = -0.12 }
+            }
+
+            P = P + V
+
+            MinX = PauseCenter[1] - FogArea[1]/2
+            MaxX = PauseCenter[1] + FogArea[1]/2
+            MinY = PauseCenter[2] + FogOffset[2] - FogArea[2]/2
+            MaxY = PauseCenter[2] + FogOffset[2] + FogArea[2]/2
+            if (P[1] < MinX) { P[1] = MaxX } elseif (P[1] > MaxX) { P[1] = MinX }
+            if (P[2] < MinY) { P[2] = MaxY } elseif (P[2] > MaxY) { P[2] = MinY }
+
+            Size  = 12 + random(10)
+            Alpha = 70 + random(50)
+            E:egpCircle(PauseFogBaseID + I, P, vec2(Size, Size))
+            E:egpColor(PauseFogBaseID + I, vec4(120, 0, 0, Alpha))
+
+            PauseFogPos[I, vector2] = P
+            PauseFogVel[I, vector2] = V
+            I = I + 1
+        }
+
+        # --- Drop init (once again) ---
+        if (PauseInit != 1) {
+            PauseDropY = array()
+            PauseSpeed = array()
+            PauseLen   = array()
+            PauseWid   = array()
+            PauseBaseX = array()
+            I = 1
+            while (I <= PauseDropCount) {
+                BaseX = PauseCenter[1] - DropAreaWidth/2 + (DropAreaWidth/(PauseDropCount+1))*I + (random(10)-5)
+                PauseBaseX:pushNumber(BaseX)
+                PauseDropY:pushNumber(random(DropDepth))
+                PauseLen:pushNumber(   DropLenMin + random(DropLenMax - DropLenMin))
+                PauseWid:pushNumber(   DropWidthMin + random(DropWidthMax - DropWidthMin))
+                PauseSpeed:pushNumber( SpeedMinPx + random(SpeedMaxPx - SpeedMinPx))
+                I = I + 1
+            }
+            PauseInit = 1
+        }
+
+        # --- Drops above Fog ---
+        I = 1
+        while (I <= PauseDropCount) {
+            CurY = PauseDropY[I, number] + PauseSpeed[I, number]
+            if (CurY > DropDepth) {
+                CurY = CurY - DropDepth
+                PauseSpeed[I, number] = SpeedMinPx + random(SpeedMaxPx - SpeedMinPx)
+            }
+            PauseDropY[I, number] = CurY
+
+            X = PauseBaseX[I, number]
+            BaseY = PauseCenter[2] + DropStartYOffset - 3
+            Len = PauseLen[I, number]
+            Wid = PauseWid[I, number]
+
+            E:egpBox(PauseDropBaseID + I, vec2(X, BaseY + CurY + Len/2), vec2(Wid, Len))
+            E:egpColor(PauseDropBaseID + I, vec4(120,0,0,255))
+            I = I + 1
+        }
+
+        # --- Text ---
+        E:egpText(PauseTextID, "PAUSE!", PauseCenter)
+        E:egpFont(PauseTextID, "Arial", 96)
+        E:egpAlign(PauseTextID, 1, 1)
+        E:egpColor(PauseTextID, vec4(200,0,0,255))
+
+    } else {
+        # Hide everything
+        E:egpBox(PauseOverlayID, vec2(0,0), vec2(0,0))
+        E:egpText(PauseTextID, "", vec2(0,0))
+
+        I = 1
+        while (I <= PauseFogCount) {
+            E:egpCircle(PauseFogBaseID + I, vec2(0,0), vec2(0,0))
+            I = I + 1
+        }
+        I = 1
+        while (I <= PauseDropCount) {
+            E:egpBox(PauseDropBaseID + I, vec2(0,0), vec2(0,0))
+            I = I + 1
+        }
+        PauseFogInit = 0
+        PauseInit = 0
+    }
+
+    timer("hud",100)
+}
+#*     *******++==----:::-==========+++*********            **
+#*   *********++==----::::-=========++++************          
+#************+++==-:::::::-====--==+*++++**************       
+#********+*+++++==-::::::::--=--:==+++******   ************   
+#*******+++++++===-::::::::----::--=+**            *********  
+#******+++========-:::::::::------==*               *******   
+#  *****+==-----==-:::::::::-=====**         **       *****   
+#  *****++=--:::---:::::::::--===**                  ******   
+#  ******+==-:::::::::::::::--=+**                  ********  
+# ********+==--------:::::::-===+**                **+********
+# ****+****++++=====-:::::::--=====+*             ***+++++++++
+# ******        ****==------====-=====***     *******+++++++++
+# ****             *+=----======-======+************++++====++
+# ****    *  **    *=----=================*********+++++====++
+# ****             *=----=========--================+======+++
+# ****             +=----=========-------=================++++
+#  ****           *=--====+*     **+=--------=======---====+++
+#   ** ***        +=-=+**            +----------============++
+#      **+** ****====                 =-----------==========++
+#      *+=++****+===*                 =------------========+++
+#     *+=====+++=--=                  ======-------=======++++
+#*****+==========--=                 *=======-------======++++
+#++======---=====--=*               *++========------====+++**
+#===-----------=----=*              *++++=======----===++*****
+#==-----:------------=*            **+++++=============+*****+
+#=---::::::-------------=+        ***+++++******+++++++***+++*
+#---::::::--------------==+****   ****************++++++++++++
+#-::::::::--------------===++++*             **+++====+++=====
+#-::::::::---------------==+***           **+=================
+#---::::::---------------==+***         **+============-------
+#=---::::::-------:::--:-==***    **++==============---:::::::
+#==---------------:::---===*****+===============----::::::::::
+#======-----------:::---======================-----:::::::::::
+#What are you doing down here?
+
