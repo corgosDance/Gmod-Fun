@@ -18,6 +18,7 @@
 @persist BossE:array
 @persist ZClass:array
 @persist SpawnRadius MinDistNormal MinDistBoss TmpSpawn:array
+@persist HelperTypes:array HelperWeights:array HelperMsgs:array HelperChance
 @model models/gibs/hgibs.mdl
 
 if(first()){
@@ -60,7 +61,7 @@ if(first()){
     # Loot-Items
     LootItems = array()
     LootItems:pushString("models/props_c17/oildrum001_explosive.mdl")         # rare
-    LootItems:pushString("models/props_ junk/propane_tank001a.mdl")            # uncommon
+    LootItems:pushString("models/props_junk/propane_tank001a.mdl")           # uncommon  
     LootItems:pushString("models/props_junk/gascan001a.mdl")                  # uncommon
     LootItems:pushString("models/props_explosive/explosive_butane_can.mdl")   # common
 
@@ -77,6 +78,24 @@ if(first()){
     BossLootChance:pushNumber(20)
     BossLootChance:pushNumber(20)
     BossLootChance:pushNumber(20)
+
+    # >>> Helper config 
+    HelperChance = 5 #%chance for spawn
+
+    HelperTypes = array()
+    HelperTypes:pushString("npc_monk")
+    HelperTypes:pushString("npc_barney")
+    HelperTypes:pushString("npc_alyx")
+
+    HelperWeights = array()  
+    HelperWeights:pushNumber(35)  # monk
+    HelperWeights:pushNumber(50)  # barney
+    HelperWeights:pushNumber(15)  # alyx
+
+    HelperMsgs = array()
+    HelperMsgs:pushString("Father Grigori is here to help, can u trust him?")
+    HelperMsgs:pushString("Someone's here to help! Oh it's just Barney...")
+    HelperMsgs:pushString("Alyx: Man of few words, aren't you?")
 }
 
 interval(1000)
@@ -98,7 +117,7 @@ if(RunStatus == 1){
                 TotalKilled++
                 XP += 20 + Wave * 5
 
-                # 70% Drop-Chance
+                # 70% Drop-Chance (bei dir aktuell 89  ich lasse deinen Wert)
                 DoDrop = (random(1,100) <= 89) ? 1 : 0
                 if(DoDrop == 1){
                     ClassStr = ZClass[I,string]
@@ -200,26 +219,26 @@ if(RunStatus == 1){
         }
     }
 
-if(LastAlive > 0 && Alive == 0 && Wave > 0){
-    if(Wave == NextBigPauseWave && NeutralizedAnnouncedWave != Wave){
-        print("Waves neutralized, take a moment to recover...")
-        NeutralizedAnnouncedWave = Wave
+    if(LastAlive > 0 && Alive == 0 && Wave > 0){
+        if(Wave == NextBigPauseWave && NeutralizedAnnouncedWave != Wave){
+            print("Waves neutralized, take a moment to recover...")
+            NeutralizedAnnouncedWave = Wave
 
-        # 10-cycle Fix: 3,6,10,13,16,20,23,26,30,...
-        WMod = Wave % 10
-        if(WMod == 3){
-            NextBigPauseWave = Wave + 3      # 3 -> 6
-        }elseif(WMod == 6){
-            NextBigPauseWave = Wave + 4      # 6 -> 10 (Boss)
-        }elseif(WMod == 0){
-            NextBigPauseWave = Wave + 3      # 10 -> 13 (nchster Zyklus)
-        }else{
-            # Safety/Fallback 
-            NextBigPauseWave = (Wave - WMod) + 13
+            # 10-cycle Fix: 3,6,10,13,16,20,23,26,30,...
+            WMod = Wave % 10
+            if(WMod == 3){
+                NextBigPauseWave = Wave + 3
+            }elseif(WMod == 6){
+                NextBigPauseWave = Wave + 4
+            }elseif(WMod == 0){
+                NextBigPauseWave = Wave + 3
+            }else{
+                NextBigPauseWave = (Wave - WMod) + 13
+            }
         }
     }
-}
-LastAlive = Alive
+    LastAlive = Alive
+
     # -------- Countdown & Prints --------
     if(Alive == 0 && Countdown > 0){
         Countdown--
@@ -254,7 +273,6 @@ LastAlive = Alive
                 while(Attempts < 25 && Found == 0){
                     CPos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
                     TooClose = 0
-                    # checks if to close
                     C = 1
                     while(C <= 20){
                         if(Z[C,entity]:isValid()){
@@ -262,7 +280,6 @@ LastAlive = Alive
                         }
                         C++
                     }
-                    # checks again specials
                     if(TooClose == 0){
                         C = 1
                         while(C <= SpecialE:count()){
@@ -274,7 +291,6 @@ LastAlive = Alive
                             C++
                         }
                     }
-                    # checks if spawn is planned
                     if(TooClose == 0){
                         C = 1
                         while(C <= TmpSpawn:count()){
@@ -312,9 +328,7 @@ LastAlive = Alive
         Wave++
         print("Wave " + Wave + " started!")
 
-       
         TmpSpawn = array()
-
         Spawned = 0
         I = 1
 
@@ -387,14 +401,71 @@ LastAlive = Alive
                 H++
             }
 
+            # --- Helper NPC (param.) ---
+            if(random(1,100) <= HelperChance){
+                HRoll = random(1,100)
+                HIdx = 0
+                Cum = 0
+                JH = 1
+                while(JH <= HelperWeights:count()){
+                    Cum += HelperWeights[JH,number]
+                    if(HRoll <= Cum){ HIdx = JH, break }
+                    JH++
+                }
+                if(HIdx == 0){ HIdx = HelperWeights:count() }
+                HelperType = HelperTypes[HIdx,string]
+                HelperMsg = HelperMsgs[HIdx,string]
+                if(HelperMsg != ""){ print(HelperMsg) }
+
+                HAttempts = 0
+                HFound = 0
+                while(HAttempts < 25 && HFound == 0){
+                    HTry = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                    HClose = 0
+                    C = 1
+                    while(C <= 20){
+                        if(Z[C,entity]:isValid()){
+                            if((ZPos[C,vector] - HTry):length() < MinDistNormal){ HClose = 1, break }
+                        }
+                        C++
+                    }
+                    if(HClose == 0){
+                        C = 1
+                        while(C <= SpecialE:count()){
+                            if(SpecialE[C,entity]:isValid()){
+                                if(C <= SpecialPos:count()){
+                                    if((SpecialPos[C,vector] - HTry):length() < MinDistNormal){ HClose = 1, break }
+                                }
+                            }
+                            C++
+                        }
+                    }
+                    if(HClose == 0){
+                        C = 1
+                        while(C <= TmpSpawn:count()){
+                            if((TmpSpawn[C,vector] - HTry):length() < MinDistNormal){ HClose = 1, break }
+                            C++
+                        }
+                    }
+                    if(HClose == 0){
+                        HFound = 1
+                        HPos = HTry
+                        TmpSpawn:pushVector(HPos)
+                    }
+                    HAttempts++
+                }
+                if(HFound == 0){
+                    HPos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                }
+                npcSpawn(HelperType, HPos)
+            }
+
             # Trickle
             TrickleActive = 1
             TrickleRemaining = 10
             TrickleNext = random(2,4)
 
-            
             NextBigPauseWave = Wave
-
             Countdown = 60
             LastPrint = -1
             print("Boss spawned! (" + BossType + ")")
@@ -402,49 +473,92 @@ LastAlive = Alive
             # --- ButaneHelper ---
             if((Wave % 10) == 1){
                 MinButaneDist = 15
-
-                # Can 1
                 BPos1 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
                 propSpawn("models/props_explosive/explosive_butane_can.mdl", BPos1, ang(0,0,0), 0)
 
-                # Can 2 
                 AttemptsBC2 = 0
                 FoundBC2 = 0
                 while(AttemptsBC2 < 40 && FoundBC2 == 0){
                     BTry2 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
-                    if((BPos1 - BTry2):length() >= MinButaneDist){
-                        FoundBC2 = 1
-                        BPos2 = BTry2
-                    }
+                    if((BPos1 - BTry2):length() >= MinButaneDist){ FoundBC2 = 1, BPos2 = BTry2 }
                     AttemptsBC2++
                 }
-                if(FoundBC2 == 0){
-                    BPos2 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
-                }
+                if(FoundBC2 == 0){ BPos2 = entity():pos() + vec(random(-320,320), random(-320,320), 20) }
                 propSpawn("models/props_explosive/explosive_butane_can.mdl", BPos2, ang(0,0,0), 0)
 
-                # Can 3 
                 AttemptsBC3 = 0
                 FoundBC3 = 0
                 while(AttemptsBC3 < 60 && FoundBC3 == 0){
                     BTry3 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
                     TooCloseBC3 = 0
                     if((BPos1 - BTry3):length() < MinButaneDist){ TooCloseBC3 = 1 }
-                    if(TooCloseBC3 == 0){
-                        if((BPos2 - BTry3):length() < MinButaneDist){ TooCloseBC3 = 1 }
-                    }
-                    if(TooCloseBC3 == 0){
-                        FoundBC3 = 1
-                        BPos3 = BTry3
-                    }
+                    if(TooCloseBC3 == 0){ if((BPos2 - BTry3):length() < MinButaneDist){ TooCloseBC3 = 1 } }
+                    if(TooCloseBC3 == 0){ FoundBC3 = 1, BPos3 = BTry3 }
                     AttemptsBC3++
                 }
-                if(FoundBC3 == 0){
-                    BPos3 = entity():pos() + vec(random(-320,320), random(-320,320), 20)
-                }
+                if(FoundBC3 == 0){ BPos3 = entity():pos() + vec(random(-320,320), random(-320,320), 20) }
                 propSpawn("models/props_explosive/explosive_butane_can.mdl", BPos3, ang(0,0,0), 0)
             }
-            
+
+            # --- Helper NPC (param.) ---
+            if(random(1,100) <= HelperChance){
+                HRoll2 = random(1,100)
+                HIdx2 = 0
+                Cum2 = 0
+                JH2 = 1
+                while(JH2 <= HelperWeights:count()){
+                    Cum2 += HelperWeights[JH2,number]
+                    if(HRoll2 <= Cum2){ HIdx2 = JH2, break }
+                    JH2++
+                }
+                if(HIdx2 == 0){ HIdx2 = HelperWeights:count() }
+                HelperType2 = HelperTypes[HIdx2,string]
+                HelperMsg2 = HelperMsgs[HIdx2,string]
+                if(HelperMsg2 != ""){ print(HelperMsg2) }
+
+                H2Attempts = 0
+                H2Found = 0
+                while(H2Attempts < 25 && H2Found == 0){
+                    H2Try = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                    H2Close = 0
+                    C = 1
+                    while(C <= 20){
+                        if(Z[C,entity]:isValid()){
+                            if((ZPos[C,vector] - H2Try):length() < MinDistNormal){ H2Close = 1, break }
+                        }
+                        C++
+                    }
+                    if(H2Close == 0){
+                        C = 1
+                        while(C <= SpecialE:count()){
+                            if(SpecialE[C,entity]:isValid()){
+                                if(C <= SpecialPos:count()){
+                                    if((SpecialPos[C,vector] - H2Try):length() < MinDistNormal){ H2Close = 1, break }
+                                }
+                            }
+                            C++
+                        }
+                    }
+                    if(H2Close == 0){
+                        C = 1
+                        while(C <= TmpSpawn:count()){
+                            if((TmpSpawn[C,vector] - H2Try):length() < MinDistNormal){ H2Close = 1, break }
+                            C++
+                        }
+                    }
+                    if(H2Close == 0){
+                        H2Found = 1
+                        H2Pos = H2Try
+                        TmpSpawn:pushVector(H2Pos)
+                    }
+                    H2Attempts++
+                }
+                if(H2Found == 0){
+                    H2Pos = entity():pos() + vec(random(-SpawnRadius,SpawnRadius), random(-SpawnRadius,SpawnRadius), 50)
+                }
+                npcSpawn(HelperType2, H2Pos)
+            }
+
             # Normal Zombies
             NumZombies = round(5 * (25/5)^((Wave-1)/9))
             if(NumZombies > 25){ NumZombies = 25 }
@@ -510,7 +624,7 @@ LastAlive = Alive
                 }
             }
 
-            # 5% Bonus-Spawns (Poison/Zombine)  
+            # 5% Bonus-Spawns (Poison/Zombine)
             if(random(1,100) <= 5){
                 AttemptsP = 0
                 FoundP = 0
@@ -608,14 +722,13 @@ LastAlive = Alive
                 }
             }
 
-            
             while(BossE:count() > 0){ BossE:remove(1) }
 
             TrickleActive = 0
             TrickleRemaining = 0
             TrickleNext = 0
 
-            # Pauselogic  modul-based cause thats based (3/6 = 60s, else 6s)
+            # Pauselogic modul-based (3/6 = 60s, else 6s)
             WModStart = Wave % 10
             if(WModStart == 3){
                 Countdown = 60
@@ -636,3 +749,4 @@ Wave = Wave
 Countdown = Countdown
 XP = XP
 TotalKilled = TotalKilled
+
