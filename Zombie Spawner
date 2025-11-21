@@ -117,7 +117,7 @@ if(RunStatus == 1){
                 TotalKilled++
                 XP += 20 + Wave * 5
 
-                # 70% Drop-Chance (bei dir aktuell 89  ich lasse deinen Wert)
+                # 70% Drop-Chance 
                 DoDrop = (random(1,100) <= 89) ? 1 : 0
                 if(DoDrop == 1){
                     ClassStr = ZClass[I,string]
